@@ -90,6 +90,75 @@ Conf-Slave serves as a cache for each datacenter and contains Git repository. It
 - One Conf-Slave in main cluster (optinoal peristent storage)
 - Multiple test jobs to fetch configuration and show configuration changes (HUP signal)
 
-## Other Issues
+##  Issues
 - backup Conf-Master
 - Load balance & fault tolerant scheme for Conf-Slave
+- Granularity of files 
+- Support for templating and variable (on which level? support for conditional predicates?)
+
+
+## Sample configuration
+From Jay's configuration (https://bitbucket.org/cdnetworks/gslb-msa/src/dfd6f207f0a66834861aef82eaa8a27936efd9b2/cache_mgmt/cache_conf.py?at=master&fileviewer=file-view-default)
+### nginx upstream
+```
+server {
+    listen       8082;
+    server_name  $cache_domain_name;
+
+    set $host_name $org_domain_name;
+    set $host_port 80;
+    set $x_host "";
+    location / {
+        include logic/cdns_query.conf;
+
+        proxy_pass http://next;
+        proxy_http_versio 1.1;
+        proxy_set_header Host $host_name;
+        proxy_set_header X-Host $x_host;
+    }
+
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+        root   html;
+    }
+}
+```
+
+### nginx downstream
+```
+server {
+    listen       80;
+    server_name  $cache_domain_name;
+
+    location / {
+        proxy_pass http://cache_ats;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+    }
+
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+        root   html;
+    }
+}
+```
+
+### ATS HDREWRITE
+```
+# default max-age
+cond %{READ_RESPONSE_HDR_HOOK} [AND]
+cond %{HEADER:Cache-Control} /max-age/ [NOT]
+add-header Cache-Control "max-age=1111"
+```
+
+### ADS REMAP
+```
+map http://$cache_domain_name/ http://$org_domain_name/ @plugin=header_rewrite.so @pparam=hdr_rewrite/$cache_domain_name.conf
+map http://$cache_domain_name/inspect/ http://{cache}/
+map http://$cache_domain_name/internal/ http://{cache-internal}/
+map http://$cache_domain_name/stat/ http://{stat}/
+map http://$cache_domain_name/test/ http://{test}/
+map http://$cache_domain_name/hostdb/ http://{hostdb}/
+map http://$cache_domain_name/net/ http://{net}/
+map http://$cache_domain_name/http/ http://{http}/
+```
