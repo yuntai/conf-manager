@@ -1,15 +1,15 @@
 # Components
-## Conf-Serv (Central Configution Server)
+## Conf-Master (Central Configution Server)
 ### Git Orgarnization
-- datacentes/<datacenter name>/version
+- datacenters/<datacenter name>/version
 - services/<service name>/version
 - applications/<application name>/version
 
-## Conf-Local (Surrogate Configuration Server for each datacenter)
-- Serve as cache for datacenter
-- Git repository serving datacenter
+## Conf-Slave (Surrogate Configuration Server for each datacenter)
+Conf-Slave serves as a cache for each datacenter and contains Git repository. It monitors dataceters branch 'datacenters/<datacenter ID>/<datacenter version>' to detect any changes in configuration for the datacenter. Notification in changes can be done in a sperate channel -- using consul or other method to mitigate a possible issue with load in the master server
 ### Configuration fetcher 
 - bootup configuration
+  - datacenter ID, datacenter Version
   - url of central repository
   - credential
 - process
@@ -18,7 +18,7 @@
 - Populate Consul K/V storage
   - configurations/service/name/branch/commit
 
-## Local Host Configuration
+## Conf-Local (Local Host Configuration Service)
 - Serve as local cache
 ### Fetcher
 - configuration
@@ -35,12 +35,17 @@
       - output json
       - export configuration? how? 
 
-** Use cases
+## Load
+- Load of Conf-Master is proporitional to the number of datacenters
+- Load of Conf-Master is proportional to the number of jobs in the datacenter
+
+
+## Use cases
   - (Imaginary) Nomad Job Manager detects configuration and restart jobs
   - Local script detects configuratin chagnes and HUP
   - Local go library detects configuratin chagnes and HUP
 
-** Consul K/V storage orgarnization
+## Consul K/V storage orgarnization
   - configurations/services/name/version: branch/commitId
 
 # POC setup
@@ -48,3 +53,6 @@
 - A job in main cluster as a surrogate git repository (peristent storage desirable)
 - Multiple test jobs to fetch configuration and show configuration changes (HUP signal)
 
+## Other Issues
+- backup Conf-Master
+- Load balance & fault tolerant scheme for Conf-Slave
