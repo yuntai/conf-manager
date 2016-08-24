@@ -26,6 +26,8 @@ Very well be outside of the scope of the project
 - with asusmtion - given inventory
 - Serf or other gosship protocols?
 
+### Configuration format
+
 # Initial Design
 Initial idea is to have we have a central repository set up in a redundant way with one slave repository for each datacenter. The slave repository will mirror the master repository and serves as a cache for the data center.
 
@@ -34,6 +36,7 @@ Initial idea is to have we have a central repository set up in a redundant way w
 ### Master Gir Repository Orgarnization
 - datacenter-configuration/<datacenter>
   master repository for datacenter configuration
+```json
   {
     services: [ {
       name: test_service0, 
@@ -46,18 +49,19 @@ Initial idea is to have we have a central repository set up in a redundant way w
       tag: v1.0
     }],
   }
+```
 
 - datacenter/<datacenter id>
   specific instance of configuration with inventories(?)
+```json
   {
     conf: datacenter-configuration/bigdatacenter/v1.1
     inventories: {
     }
   }
+```
 
 - services/<service name>/version
-  {
-  }
 - applications/<application name>/version
 - devices/<device name>/version
 
