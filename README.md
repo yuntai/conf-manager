@@ -1,5 +1,6 @@
 ## Issues
 
+
 ### snapshoting
 - disk size
 - traffic load (chattiness vs. throughput requriement)
@@ -27,6 +28,10 @@ Very well be outside of the scope of the project
 - Serf or other gosship protocols?
 
 ### Configuration format
+
+### Trigerring
+- Git hook
+- Events propgation
 
 # Initial Design
 Initial idea is to have we have a central repository set up in a redundant way with one slave repository for each datacenter. The slave repository will mirror the master repository and serves as a cache for the data center.
