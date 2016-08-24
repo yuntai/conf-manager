@@ -1,30 +1,30 @@
 ## Issues
 
-- snapshoting
-  - disk size
-  - traffic load (chattiness vs. throughput requriement)
-  - bootup time (initial replication of repository)
-  - backup size
-  - mechanism
+### snapshoting
+- disk size
+- traffic load (chattiness vs. throughput requriement)
+- bootup time (initial replication of repository)
+- backup size
+- mechanism
 
-- backup Conf-Master
-- Load balance & fault tolerant scheme for Conf-Slave
-- Granularity of file and changes
+### backup Conf-Master
+### Load balance & fault tolerant scheme for Conf-Slave
+### Granularity of file and changes
 
-- Support for templating and variable (on which level? support for predicates?)
+### Support for templating and variable (on which level? support for predicates?)
 
-- Updates strategy
-  - Granteeness of simultaneous updates of configuration for multiple clusters (User cases?)
-  - Strict or leanient
-  - Automatic rollback?
-  - Staggering
+### Updates strategy
+- Granteeness of simultaneous updates of configuration for multiple clusters (User cases?)
+- Strict or leanient
+- Automatic rollback?
+- Staggering
 
-- Existing usage or system?
+### Existing usage or system?
 
-- Membership of participants & Fault Detection
-  Very well be outside of the scope of the project
-  - with asusmtion - given inventory
-  - Serf or other gosship protocols?
+### Membership of participants & Fault Detection
+Very well be outside of the scope of the project
+- with asusmtion - given inventory
+- Serf or other gosship protocols?
 
 # Initial Design
 Initial idea is to have we have a central repository set up in a redundant way with one slave repository for each datacenter. The slave repository will mirror the master repository and serves as a cache for the data center.
