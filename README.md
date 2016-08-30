@@ -1,5 +1,10 @@
+## Use Cases
+- Change LOG levels
+
 ## Issues
 
+### runtime property changes?
+- mechanism
 
 ### snapshoting
 - disk size
@@ -12,19 +17,23 @@
 ### Load balance & fault tolerant scheme for Conf-Slave
 ### Granularity of file and changes
 
+### Local Configuration Change Mechanism
+- push for devices?
+- push using ansible
+- consul watch and configuration pull?
+
 ### Support for templating and variable (on which level? support for predicates?)
 
 ### Updates strategy
 - Granteeness of simultaneous updates of configuration for multiple clusters (User cases?)
 - Strict or leanient
-- Automatic rollback?
+- Automatic rollback mechanism
 - Staggering
 
-### Existing usage or system?
 
 ### Membership of participants & Fault Detection
-Very well be outside of the scope of the project
-- with asusmtion - given inventory
+Could be outside of the scope of the project
+- with asusmtion - given inventory (is Push model applicable?)
 - Serf or other gosship protocols?
 
 ### Configuration format
@@ -60,9 +69,8 @@ Initial idea is to have we have a central repository set up in a redundant way w
   specific instance of configuration with inventories(?)
 ```json
   {
+    environment: prod
     conf: datacenter-configuration/bigdatacenter/v1.1
-    inventories: {
-    }
   }
 ```
 
@@ -116,7 +124,7 @@ Conf-Slave serves as a cache for each datacenter and contains Git repository. It
 - Load of Conf-Master is proporitional to the number of datacenters
 - Load of Conf-Master is proportional to the number of jobs in the datacenter
 
-## Use cases
+## Configuration changes mechanism
   - (Imaginary) Nomad Job Manager detects configuration and restart jobs
   - Local script detects configuratin chagnes and HUP
   - Local go library detects configuratin chagnes and HUP
@@ -195,3 +203,10 @@ map http://$cache_domain_name/hostdb/ http://{hostdb}/
 map http://$cache_domain_name/net/ http://{net}/
 map http://$cache_domain_name/http/ http://{http}/
 ```
+
+### Configuration
+(CS features by OUI & Configuration files)[https://wiki.cdnetworks.com/confluence/pages/viewpage.action?pageId=110991357]
+
+# Consul KV storage
+- size limitation (512k)
+
