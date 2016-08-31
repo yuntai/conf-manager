@@ -1,11 +1,17 @@
 package main
 
+// error handling/timeout/retry
+// memcache backend
+// config transportation type (consul, git pull?)
+// git pull (packed file?)
+
 import (
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"path"
 	"strings"
 	"sync"
 	"syscall"
@@ -15,66 +21,41 @@ import (
 	git "gopkg.in/libgit2/git2go.v24"
 )
 
-func GetKVStorage(host string) (*consulapi.KV, error) {
-	config := consulapi.DefaultConfig()
-	config.Address = host + ":8500"
-
-	if client, err := consulapi.NewClient(config); err != nil {
-		return nil, err
-	} else {
-		return client.KV(), nil
-	}
-}
-
-func getLastCommit(repo *git.Repository, branchName string) (string, error) {
-	branch, err := repo.LookupBranch(branchName, git.BranchLocal)
-	if err != nil {
-		return "", err
-	}
-	//TODO: when branch need to be resolved?
-	//ref, err := branch.Resolve()
-	//if err != nil {
-	//return nil, err
-	//}
-	currentTip, err := repo.LookupCommit(branch.Target())
-	return currentTip.Id().String(), nil
-}
-
-type Config struct {
+type MasterConfig struct {
 	configKey       string
-	monitorKey      string
 	monitorInterval int64
 	updateInterval  int64
 }
 
+type MasterContext struct {
+	config   *MasterConfig
+	kv       *consulapi.KV
+	repos    map[string]*Repo
+	nodeName string
+}
+
 type Repo struct {
-	currentTip string
-	name       string
-	branchName string
+	currentTip string          // latest commit
+	name       string          // repo name
+	branchName string          // branch name
 	repo       *git.Repository // object cache
 	//TODO: remember error
 }
 
-type Context struct {
-	config *Config
-	kv     *consulapi.KV
-	repos  map[string]*Repo
+func AddFSRepo(context *MasterContext, pathName string, branchName string) error {
+	repo, err := git.OpenRepository(pathName)
+	if err != nil {
+		return err
+	}
+	repoName := path.Base(pathName)
+	context.repos["repoName/branchName"] = &Repo{"", repoName, branchName, repo}
+	return nil
 }
 
-func initialize() *Context {
-
-	const (
-		DEFAULT_CONFIG_KEY_PREFIX       = "config/version"
-		DEFAULT_CONFIG_WATCH_KEY_PREFIX = "config/watch"
-		DEFAULT_UPDATE_INTERVAL         = 1000 // in millisecond
-		DEFUALT_MONITOR_INTERVAL        = 3000
-		DEFAULT_CONSUL_HOST             = "localhost"
-	)
-
+func parseParams() {
 	var configKeyPrefix = flag.String("config key prefix", DEFAULT_CONFIG_KEY_PREFIX, "key prefix for config version")
-	var configMonitorKeyPrefix = flag.String("config watch key prefix", DEFAULT_CONFIG_WATCH_KEY_PREFIX, "key prefix for watch")
 	var updateInterval = flag.Int64("update interval", DEFAULT_UPDATE_INTERVAL, "update interval in millisecond")
-	var monitorInterval = flag.Int64("update interval", DEFUALT_MONITOR_INTERVAL, "update interval in millisecond")
+	var monitorInterval = flag.Int64("monitor interval", DEFUALT_MONITOR_INTERVAL, "monitor interval in millisecond")
 	var consulHost = flag.String("consul host", DEFAULT_CONSUL_HOST, "consul host")
 
 	flag.Parse()
@@ -83,35 +64,49 @@ func initialize() *Context {
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
+}
 
-	config := &Config{
+func initializeMaster() *MasterContext {
+
+	config := &MasterConfig{
 		configKey:       *configKeyPrefix,
-		monitorKey:      *configMonitorKeyPrefix,
 		updateInterval:  *updateInterval,
 		monitorInterval: *monitorInterval,
 	}
 
-	kv, err := GetKVStorage(*consulHost)
+	consulClient, err := GetConsulClient(*consulHost)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	return &Context{config: config, kv: kv}
+	nodeName, err := consulClient.Agent().NodeName()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	kv := consulClient.KV()
+
+	fmt.Printf("Initalizing node(%s)\n", nodeName)
+	return &MasterContext{config: config, kv: kv, repos: make(map[string]*Repo), nodeName: nodeName}
 }
 
-func monitorWatch(context *Context) {
-	keys, m, err := context.kv.Keys(context.config.monitorKey, "/", nil)
+func monitorWatch(context *MasterContext) {
+	return
+	config := context.config
+	keys, m, err := context.kv.Keys(config.configKey, "/", nil)
 	if err != nil {
 		//TODO: error handling
 		return
 	}
 
-	fmt.Printf("req(%v)", m.RequestTime)
+	fmt.Printf("monitor key(%s) req(%v)\n", keys, m.RequestTime)
 	// check for new key
 	for _, k := range keys {
 		// TODO: should be subkey
-		fmt.Printf("key(%s)", k)
+		fmt.Printf("key(%s)\n", k)
 		// handle new key
+
 		if _, ok := context.repos[k]; !ok {
 			path := "dummy"
 			repoName := "repoName"
@@ -128,29 +123,36 @@ func monitorWatch(context *Context) {
 	//TODO: reverse check
 }
 
-func updateCommits(context *Context) {
+func updateCommit(context *MasterContext) {
 	config := context.config
 
-	// TODO: parallelize
+	// TODO: maybe parallelize
 	for _, repo := range context.repos {
 
-		key := strings.Join([]string{config.configKey, repo.name, repo.branchName}, "/")
+		repoKey := strings.Join([]string{config.configKey, repo.name, repo.branchName, context.nodeName + "_master"}, "/")
 
 		commit, err := getLastCommit(repo.repo, repo.branchName)
-
-		value := []byte(commit)
-
-		// TODO: user interface && OOP way
-		w, err := context.kv.Put(&consulapi.KVPair{Flags: 31, Key: key, Value: value}, nil)
 		if err != nil {
-			log.Fatal(err)
+			panic(err)
 		}
-		fmt.Printf("Pushing key(%s) commit(%s) time(%v)", key, commit, w.RequestTime)
+
+		fmt.Printf("update(%s) repoKey(%s) commit(%s)\n", context.nodeName, repoKey, commit)
+
+		if commit != repo.currentTip {
+			value := []byte(commit)
+
+			// TODO: use user interface/OOP way?
+			w, err := context.kv.Put(&consulapi.KVPair{Flags: FLAG0, Key: repoKey, Value: value}, nil)
+			if err != nil {
+				log.Fatal(err)
+			}
+			repo.currentTip = commit // cache
+			fmt.Printf("Pushed key(%s) commit(%s) time(%v)\n", repoKey, commit, w.RequestTime)
+		}
 	}
 }
 
-func loop(done chan struct{}, context *Context) {
-
+func masterLoop(done chan struct{}, context *MasterContext) {
 	config := context.config
 	updateTicker := time.NewTicker(time.Millisecond * time.Duration(config.updateInterval))
 	monitorTicker := time.NewTicker(time.Millisecond * time.Duration(config.monitorInterval))
@@ -161,7 +163,7 @@ func loop(done chan struct{}, context *Context) {
 			case <-updateTicker.C:
 				monitorWatch(context)
 			case <-monitorTicker.C:
-				updateCommits(context)
+				updateCommit(context)
 			case <-done:
 				return
 			}
@@ -170,14 +172,22 @@ func loop(done chan struct{}, context *Context) {
 }
 
 func main() {
-	context := initialize()
+	context := initializeMaster()
+	flushKV("", context.kv)
+
+	// add test file repo
+	if err := AddFSRepo(context, "/home/yuntai/git/testrepo", "master"); err != nil {
+		log.Panic(err)
+	}
+
 	done := make(chan struct{})
 	var wg sync.WaitGroup
 
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 
-	loop(done, context)
+	masterLoop(done, context)
+	wg.Add(1)
 
 	go func() {
 		defer wg.Done()

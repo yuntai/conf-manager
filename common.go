@@ -1,0 +1,79 @@
+package main
+
+// error handling/timeout/retry
+// memcache backend
+// config transportation type (consul, git pull?)
+// git pull (packed file?)
+
+import (
+	"fmt"
+	"log"
+
+	consulapi "github.com/hashicorp/consul/api"
+	git "gopkg.in/libgit2/git2go.v24"
+)
+
+const (
+	FLAG0 = iota
+	FLAG1 = iota
+)
+
+const (
+	DEFAULT_CONFIG_KEY_PREFIX       = "config/revision"
+	DEFAULT_CONFIG_WATCH_KEY_PREFIX = "config/watch"
+	DEFAULT_UPDATE_INTERVAL         = 1000 // in millisecond
+	DEFUALT_MONITOR_INTERVAL        = 3000
+	DEFAULT_CONSUL_HOST             = "localhost"
+
+	DEFAULT_LOCAL_GIT_PATH_ROOT = "/mnt/tmp/conf/gitroot"
+
+	MASTER_KEY = "master"
+)
+
+func GetConsulClient(host string) (*consulapi.Client, error) {
+	config := consulapi.DefaultConfig()
+	config.Address = host + ":8500"
+
+	if client, err := consulapi.NewClient(config); err != nil {
+		return nil, err
+	} else {
+		return client, nil
+	}
+}
+
+//func GetKVStorage(host string) (*consulapi.KV, error) {
+//	config := consulapi.DefaultConfig()
+//	config.Address = host + ":8500"
+//
+//	if client, err := consulapi.NewClient(config); err != nil {
+//		return nil, err
+//	} else {
+//		nodeName := client.Agent().NodeName()
+//		fmt.Printf("nodeName(%s)", nodeName)
+//		return client.KV(), nil
+//	}
+//}
+
+func flushKV(prefix string, kv *consulapi.KV) error {
+	fmt.Printf("Flushing KV storage prefix(%s)\n", prefix)
+	_, err := kv.DeleteTree(prefix, nil)
+	if err != nil {
+		fmt.Println("Failed to flush KV storage")
+		log.Panic(err)
+	}
+	return err
+}
+
+func getLastCommit(repo *git.Repository, branchName string) (string, error) {
+	branch, err := repo.LookupBranch(branchName, git.BranchLocal)
+	if err != nil {
+		return "", err
+	}
+	//TODO: when branch need to be resolved?
+	//ref, err := branch.Resolve()
+	//if err != nil {
+	//return nil, err
+	//}
+	currentTip, err := repo.LookupCommit(branch.Target())
+	return currentTip.Id().String(), nil
+}
