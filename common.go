@@ -41,19 +41,6 @@ func GetConsulClient(host string) (*consulapi.Client, error) {
 	}
 }
 
-//func GetKVStorage(host string) (*consulapi.KV, error) {
-//	config := consulapi.DefaultConfig()
-//	config.Address = host + ":8500"
-//
-//	if client, err := consulapi.NewClient(config); err != nil {
-//		return nil, err
-//	} else {
-//		nodeName := client.Agent().NodeName()
-//		fmt.Printf("nodeName(%s)", nodeName)
-//		return client.KV(), nil
-//	}
-//}
-
 func flushKV(prefix string, kv *consulapi.KV) error {
 	fmt.Printf("Flushing KV storage prefix(%s)\n", prefix)
 	_, err := kv.DeleteTree(prefix, nil)
@@ -62,6 +49,15 @@ func flushKV(prefix string, kv *consulapi.KV) error {
 		log.Panic(err)
 	}
 	return err
+}
+
+func initGitRepo(path string) error {
+	if repo, err := git.InitRepository(path, false); err != nil {
+		return err
+	} else {
+		fmt.Printf("repo(%v)", repo)
+		return nil
+	}
 }
 
 func getLastCommit(repo *git.Repository, branchName string) (string, error) {

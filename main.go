@@ -6,16 +6,21 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path"
 	"sync"
 	"syscall"
 )
 
 func parseParams() (interface{}, string) {
+	// TODO: ugly
 	var nodeType = flag.String("nodetype", "slave", "specify node type")
 	var configKeyPrefix = flag.String("configkey", DEFAULT_CONFIG_KEY_PREFIX, "key prefix for config version")
 	var consulHost = flag.String("consulhost", DEFAULT_CONSUL_HOST, "consul host")
 	var updateInterval = flag.Int64("updateinterval", DEFAULT_UPDATE_INTERVAL, "update interval in millisecond")
 	var monitorInterval = flag.Int64("monitorinterval", DEFUALT_MONITOR_INTERVAL, "monitor interval in millisecond")
+
+	// slave only param
+	var gitRoot = flag.String("gitroot", DEFAULT_LOCAL_GIT_PATH_ROOT, "local git path root")
 
 	flag.Parse()
 
@@ -45,19 +50,27 @@ func parseParams() (interface{}, string) {
 				updateInterval:  *updateInterval,
 				monitorInterval: *monitorInterval,
 			},
-			kv:       kv,
-			repos:    make(map[string]*Repo),
-			nodeName: nodeName,
+			kv:           kv,
+			repos:        make(map[string]*Repo),
+			nodeName:     nodeName,
+			consulClient: consulClient,
 		}, "master"
 	} else {
+		path := path.Join(*gitRoot, nodeName)
+		if err := os.MkdirAll(path, 0600); err != nil {
+			panic(err)
+		}
+
 		fmt.Printf("Initalizing slave(%s)\n", nodeName)
 		return &SlaveContext{
 			config: &SlaveConfig{
 				configKey:       *configKeyPrefix,
 				monitorInterval: *monitorInterval,
+				gitRoot:         *gitRoot,
 			},
-			kv:       kv,
-			nodeName: nodeName,
+			kv:           kv,
+			nodeName:     nodeName,
+			consulClient: consulClient,
 		}, "slave"
 	}
 }

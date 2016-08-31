@@ -23,11 +23,12 @@ type MasterConfig struct {
 }
 
 type MasterContext struct {
-	nodeName string
-	config   *MasterConfig
-	kv       *consulapi.KV
-	repos    map[string]*Repo
-	nodeType string
+	nodeName     string
+	config       *MasterConfig
+	consulClient *consulapi.Client
+	kv           *consulapi.KV
+	repos        map[string]*Repo
+	nodeType     string
 }
 
 type Repo struct {
