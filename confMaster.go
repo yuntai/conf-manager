@@ -6,15 +6,10 @@ package main
 // git pull (packed file?)
 
 import (
-	"flag"
 	"fmt"
 	"log"
-	"os"
-	"os/signal"
 	"path"
 	"strings"
-	"sync"
-	"syscall"
 	"time"
 
 	consulapi "github.com/hashicorp/consul/api"
@@ -28,10 +23,11 @@ type MasterConfig struct {
 }
 
 type MasterContext struct {
+	nodeName string
 	config   *MasterConfig
 	kv       *consulapi.KV
 	repos    map[string]*Repo
-	nodeName string
+	nodeType string
 }
 
 type Repo struct {
@@ -50,45 +46,6 @@ func AddFSRepo(context *MasterContext, pathName string, branchName string) error
 	repoName := path.Base(pathName)
 	context.repos["repoName/branchName"] = &Repo{"", repoName, branchName, repo}
 	return nil
-}
-
-func parseParams() {
-	var configKeyPrefix = flag.String("config key prefix", DEFAULT_CONFIG_KEY_PREFIX, "key prefix for config version")
-	var updateInterval = flag.Int64("update interval", DEFAULT_UPDATE_INTERVAL, "update interval in millisecond")
-	var monitorInterval = flag.Int64("monitor interval", DEFUALT_MONITOR_INTERVAL, "monitor interval in millisecond")
-	var consulHost = flag.String("consul host", DEFAULT_CONSUL_HOST, "consul host")
-
-	flag.Parse()
-
-	if !flag.Parsed() {
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-}
-
-func initializeMaster() *MasterContext {
-
-	config := &MasterConfig{
-		configKey:       *configKeyPrefix,
-		updateInterval:  *updateInterval,
-		monitorInterval: *monitorInterval,
-	}
-
-	consulClient, err := GetConsulClient(*consulHost)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	nodeName, err := consulClient.Agent().NodeName()
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	kv := consulClient.KV()
-
-	fmt.Printf("Initalizing node(%s)\n", nodeName)
-	return &MasterContext{config: config, kv: kv, repos: make(map[string]*Repo), nodeName: nodeName}
 }
 
 func monitorWatch(context *MasterContext) {
@@ -169,47 +126,4 @@ func masterLoop(done chan struct{}, context *MasterContext) {
 			}
 		}
 	}()
-}
-
-func main() {
-	context := initializeMaster()
-	flushKV("", context.kv)
-
-	// add test file repo
-	if err := AddFSRepo(context, "/home/yuntai/git/testrepo", "master"); err != nil {
-		log.Panic(err)
-	}
-
-	done := make(chan struct{})
-	var wg sync.WaitGroup
-
-	c := make(chan os.Signal, 2)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
-
-	masterLoop(done, context)
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		defer close(done)
-		v := <-c
-		//TODO: handle SIGHUP
-		fmt.Printf("Get signal(%v)...\n", v)
-	}()
-	wg.Wait()
-
-	/*
-		repoName := "nomad"
-		path := "/home/yuntai/git_pub/nomad"
-		repo, err := git.OpenRepository(path)
-
-		//branchName := "f-sort-summaries"
-		branchName := "master"
-		commit, err := getLastCommit(repo, branchName)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		fmt.Printf("branch(%s) commit(%s)\n", branchName, commit)
-	*/
 }

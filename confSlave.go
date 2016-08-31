@@ -22,6 +22,7 @@ type SlaveContext struct {
 	config   *SlaveConfig
 	kv       *consulapi.KV
 	nodeName string
+	nodeType string
 }
 
 func initializeSalve() *SlaveContext {
@@ -81,7 +82,7 @@ func slaveLoop(done chan struct{}, context *SlaveContext) {
 	}()
 }
 
-func run() {
+func slaveRun() {
 	context := initializeSalve()
 
 	done := make(chan struct{})
