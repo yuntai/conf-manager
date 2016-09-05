@@ -27,16 +27,21 @@ type MasterContext struct {
 	config       *MasterConfig
 	consulClient *consulapi.Client
 	kv           *consulapi.KV
-	repos        map[string]*Repo
+	appConfigs   map[string]*AppConfig
 	nodeType     string
 }
 
-type Repo struct {
-	currentTip string          // latest commit
-	name       string          // repo name
-	branchName string          // branch name
-	repo       *git.Repository // object cache
-	//TODO: remember error
+//TODO: use interface style
+type ConfMaster struct {
+}
+
+func NewConfMaster(config *MasterConfig) (*ConfMaster, error) {
+	m := &ConfMaster{}
+	return m, nil
+}
+
+func (c *ConfMaster) dosomething() (*interface{}, error) {
+	return nil, nil
 }
 
 func AddFSRepo(context *MasterContext, pathName string, branchName string) error {
@@ -81,32 +86,112 @@ func monitorWatch(context *MasterContext) {
 	//TODO: reverse check
 }
 
+func initialize(context *MasterContext) {
+	fmt.Printf("Listing root key(%s)\n", context.config.configKey)
+	pairs, meta, err := context.kv.List(context.config.configKey, nil)
+	fmt.Printf("meta(%+v) err(%+v)\n", meta, err)
+
+	for _, p := range pairs {
+		fmt.Printf("key(%s) value(%s) flags(%d)", p.Key, p.Value, p.Flags)
+
+		if path.Base(p.Key) == MASTER_NODE_NAME {
+			switch p.Flags {
+			case STABLE:
+				if err := context.localRepo.sync(p.Value); err != nil {
+					panic(err)
+				}
+			case TRANSITION:
+				if err := context.localRepo.fallback(p.Value); err != nil {
+					panic(err)
+				}
+			}
+		}
+	}
+
+	/*
+		fmt.Printf("keys(%v)\n", keys)
+
+		for _, k := range pairs {
+			base := path.Base(k)
+			if base == MASTER_NODE_NAME {
+				key := strings.Replace(k, context.config.configKey+"/", "", 1)
+				s := strings.Split(key, "/")
+				repoName, branchName := s[0], s[1]
+				fmt.Printf("repo(%s) branch(%s)\n", repoName, branchName)
+
+				pair, meta, err := context.kv.Get(key, nil)
+			}
+			//strings.Split(k, "/")
+		}
+	*/
+}
+
+func runMaster(done chan struct{}, context *MasterContext) {
+	//flushKV("", context.kv)
+	// add test file repo
+	if err := AddFSRepo(context, "/home/yuntai/git/testrepo", "master"); err != nil {
+		log.Panic(err)
+	}
+
+	initialize(context)
+	masterLoop(done, context)
+}
+
+func fallbackCommit(context *MasterContext, repo *Repo, commit string) {
+	repo.fallBack(commit)
+}
+
 func updateCommit(context *MasterContext) {
 	config := context.config
 
 	// TODO: maybe parallelize
-	for _, repo := range context.repos {
+	for _, conf := range context.appConfigs {
 
-		repoKey := strings.Join([]string{config.configKey, repo.name, repo.branchName, context.nodeName + "_master"}, "/")
+		localTip := conf.localRepo.getTip()
 
-		commit, err := getLastCommit(repo.repo, repo.branchName)
+		globalTip := conf.globalRepo.getTip()
+
+		res := CompareCommitTip(repo.globalRepo, localTip, globalTip)
+
+		if res == 0 {
+			continue
+		} else if res < 0 {
+			// fatal condition
+		}
+
+		nextCommit := repo.globalRepo.nextCommit(localTip)
+
+		repo.localRepo.advance(nextCommit)
+
+		w, err := context.kv.Put(&consulapi.KVPair{Flags: TRANSITION, Key: repo.key(), Value: nextCommit}, nil)
+
 		if err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
+		// set timeout
+		//SetTimeout()
 
-		fmt.Printf("update(%s) repoKey(%s) commit(%s)\n", context.nodeName, repoKey, commit)
+		//repoKey := strings.Join([]string{config.configKey, repo.name, repo.branchName, context.nodeName}, "/")
 
-		if commit != repo.currentTip {
-			value := []byte(commit)
+		//commit, err := getLastCommit(repo.repo, repo.branchName)
 
-			// TODO: use user interface/OOP way?
-			w, err := context.kv.Put(&consulapi.KVPair{Flags: FLAG0, Key: repoKey, Value: value}, nil)
-			if err != nil {
-				log.Fatal(err)
-			}
-			repo.currentTip = commit // cache
-			fmt.Printf("Pushed key(%s) commit(%s) time(%v)\n", repoKey, commit, w.RequestTime)
-		}
+		//if err != nil {
+		//	panic(err)
+		//}
+
+		//fmt.Printf("update(%s) repoKey(%s) commit(%s)\n", context.nodeName, repoKey, commit)
+
+		//if commit != repo.currentTip {
+		//	value := []byte(commit)
+
+		//	// TODO: use user interface/OOP way?
+		//	w, err := context.kv.Put(&consulapi.KVPair{Flags: FLAG0, Key: repoKey, Value: value}, nil)
+		//	if err != nil {
+		//		log.Fatal(err)
+		//	}
+		//	repo.currentTip = commit // cache
+		//	fmt.Printf("Pushed key(%s) commit(%s) time(%v)\n", repoKey, commit, w.RequestTime)
+		//}
 	}
 }
 

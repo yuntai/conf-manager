@@ -14,6 +14,8 @@ import (
 func parseParams() (interface{}, string) {
 	// TODO: ugly
 	var nodeType = flag.String("nodetype", "slave", "specify node type")
+	*nodeType = "master"
+
 	var configKeyPrefix = flag.String("configkey", DEFAULT_CONFIG_KEY_PREFIX, "key prefix for config version")
 	var consulHost = flag.String("consulhost", DEFAULT_CONSUL_HOST, "consul host")
 	var updateInterval = flag.Int64("updateinterval", DEFAULT_UPDATE_INTERVAL, "update interval in millisecond")
@@ -42,7 +44,7 @@ func parseParams() (interface{}, string) {
 	kv := consulClient.KV()
 
 	if *nodeType == "master" {
-		nodeName = nodeName + "-m"
+		nodeName = MASTER_NODE_NAME
 		fmt.Printf("Initalizing master(%s)\n", nodeName)
 		return &MasterContext{
 			config: &MasterConfig{
@@ -85,14 +87,8 @@ func main() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 
 	if nodeType == "master" {
-		masterContext := context.(*MasterContext)
-		flushKV("", masterContext.kv)
-		// add test file repo
-		if err := AddFSRepo(masterContext, "/home/yuntai/git/testrepo", "master"); err != nil {
-			log.Panic(err)
-		}
-
-		masterLoop(done, masterContext)
+		//TODO: ugly
+		runMaster(done, context.(*MasterContext))
 	} else {
 		slaveContext := context.(*SlaveContext)
 		slaveLoop(done, slaveContext)

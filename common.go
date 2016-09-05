@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	FLAG0 = iota
-	FLAG1 = iota
+	STABLE = iota
+	TRANSITION
 )
 
 const (
@@ -27,7 +27,7 @@ const (
 
 	DEFAULT_LOCAL_GIT_PATH_ROOT = "/mnt/tmp/conf/gitroot"
 
-	MASTER_KEY = "master"
+	MASTER_NODE_NAME = "master"
 )
 
 func GetConsulClient(host string) (*consulapi.Client, error) {
