@@ -19,7 +19,7 @@ func pathInRepo(repo *git.Repository, name string) string {
 
 // copied from libgit2/git_test.go
 func updateReadme(t *testing.T, repo *git.Repository, content string) (*git.Oid, *git.Oid) {
-	loc, err := time.LoadLocation("Europe/Berlin")
+	loc, err := time.LoadLocation("Asia/Seoul")
 	checkFatal(t, err)
 	sig := &git.Signature{
 		Name:  "Rand Om Hacker",
@@ -54,7 +54,7 @@ func updateReadme(t *testing.T, repo *git.Repository, content string) (*git.Oid,
 
 // copied from libgit2/git_test.go
 func seedTestRepo(t *testing.T, repo *git.Repository) (*git.Oid, *git.Oid) {
-	loc, err := time.LoadLocation("Europe/Berlin")
+	loc, err := time.LoadLocation("Asia/Seoul")
 	checkFatal(t, err)
 	sig := &git.Signature{
 		Name:  "Rand Om Hacker",
@@ -158,8 +158,8 @@ func TestRepoClone(t *testing.T) {
 	url := fmt.Sprintf("file://%s", r.Path())
 
 	remoteConfig := &RepoRemoteConfig{
-		url:    url,
-		branch: "master",
+		url:        url,
+		branchName: "master",
 	}
 
 	path := makeTempDir(t)
@@ -172,5 +172,41 @@ func TestRepoClone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to clone repo")
 	}
-	fmt.Printf("repo(%#v)", repo)
+	fmt.Printf("repo(%#v)\n", repo)
+
+	commit, err := repo.getTip()
+	if err != nil {
+		t.Fatalf("Failed to get tip: %v", err)
+	}
+	fmt.Printf("current tip(%s)\n", commit)
+}
+
+func TestRepoSnapshot(t *testing.T) {
+	r := makeTestGit(t)
+	url := fmt.Sprintf("file://%s", r.Path())
+
+	remoteConfig := &RepoRemoteConfig{
+		url:        url,
+		branchName: "master",
+	}
+
+	path := makeTempDir(t)
+	config := &RepoConfig{
+		path:         path,
+		remoteConfig: remoteConfig,
+	}
+
+	repo, err := CloneRepo(config)
+	if err != nil {
+		t.Fatalf("Failed to clone repo")
+	}
+	fmt.Printf("repo(%#v)\n", repo)
+
+	commit, err := repo.getTip()
+	if err != nil {
+		t.Fatalf("Failed to get tip: %v", err)
+	}
+	repo.getSnapshot()
+
+	fmt.Printf("current tip(%s)\n", commit)
 }
