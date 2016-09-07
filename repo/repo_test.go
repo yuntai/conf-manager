@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	git "gopkg.in/libgit2/git2go.v24"
+	git "github.com/yuntai/git2go"
 )
 
 // copied from libgit2/git_test.go

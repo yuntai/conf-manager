@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	git "gopkg.in/libgit2/git2go.v24"
+	git "github.com/yuntai/git2go"
 	"os"
 )
 
@@ -108,51 +108,64 @@ func (r *Repo) getTip() (string, error) {
 	return currentTip.Id().String(), nil
 }
 
-func (r *Repo) getSnapshot() error {
+func (r *Repo) getSnapshot() (*map[string][]byte, error) {
 	if r.branch == nil {
 		branch, err := r.getBranch("master")
 		if err != nil {
 			fmt.Printf("Failed get master branch\n")
-			return err
+			return nil, err
 		}
 		r.branch = branch
 	}
 	currentTip, err := r.repo.LookupCommit(r.branch.Target())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// get tree object form commit object
 	obj, err := currentTip.Peel(git.ObjectTree)
 	if err != nil {
 		fmt.Printf("Failed to peel commit object: %v\n", err)
-		return err
+		return nil, err
 	}
 
 	tree, err := obj.AsTree()
 	if err != nil {
 		fmt.Printf("Failed to get tree: %v\n", err)
-		return err
+		return nil, err
 	}
 
 	fmt.Printf("Tree(%#v)\n", tree)
 
 	//var kv map[string][]byte
 
-	// TODO: problem! only pre-oprder supported
-	tree.Walk(func(name string, entry *git.TreeEntry) int {
-		fmt.Printf("entry name(%s)\n", entry.Name)
-		fmt.Printf("entry type(%v)\n\n", entry.Type)
-		//blob, err := r.repo.LookupBlob(entry.Id)
-		//if err != nil {
-		//	return -1
-		//}
-		//contents := string(blob.Contents())
-		//fmt.Printf("contents(%s)\n", contents)
-		return 0
-	})
+	/*
+		var postOrderList []string
+		tree.WalkWithMode(func(name string, entry *git.TreeEntry) int {
+			fmt.Printf("OID(%v) t(%v) n(%s)\n", entry.Id, entry.Type, entry.Name)
+			postOrderList = append(postOrderList, entry.Id.String())
+			return 0
+		}, git.TreeWalkModePost)
+	*/
 
-	return nil
+	// TODO: doesn't work!
+	kv := make(map[string][]byte)
+	var currentKey string
+
+	tree.WalkWithMode(func(name string, entry *git.TreeEntry) int {
+		if entry.Type == git.ObjectTree {
+			currentKey = currentKey + "/" + entry.Name
+		} else if entry.Type == git.ObjectBlob {
+			blobKey := currentKey + "/" + entry.Name
+			blob, err := r.repo.LookupBlob(entry.Id)
+			if err != nil {
+				panic(err)
+			}
+			kv[blobKey] = blob.Contents()
+		}
+		return 0
+	}, git.TreeWalkModePre)
+	return &kv, nil
 }
 
 func (r *Repo) BranchName() (string, error) {
