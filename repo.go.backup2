@@ -1,0 +1,89 @@
+func main() {
+	repoRoot := "/mnt/tmp/repoexp"
+
+	os.RemoveAll(repoRoot)
+
+	os.MkdirAll(repoRoot, 0700)
+
+	remoteRepoPath := path.Join(repoRoot, "R")
+	//remoteRepoPathURL := "file://" + remoteRepoPath
+
+	localRepoPath := path.Join(repoRoot, "L")
+	//nodeRepoPath := path.Join(repoRoot, "N")
+
+	// create non-bare repository
+	remoteRepo, err := git.InitRepository(remoteRepoPath, false)
+
+	tmpfile := "README"
+	err = ioutil.WriteFile(remoteRepoPath+"/"+tmpfile, []byte("foo\n"), 0644)
+
+	checkFatal(err)
+	commit, tree := seedTestRepo(remoteRepo)
+	fmt.Printf("Commit(%s) Tree(%s)\n", commit.String(), tree.String())
+
+	commit, tree = updateReadme(remoteRepo, "Hello world!\n")
+	fmt.Printf("Commit(%s) Tree(%s)\n", commit.String(), tree.String())
+
+	commit, tree = updateReadme(remoteRepo, "Hello world2\n")
+	fmt.Printf("Commit(%s) Tree(%s)\n", commit.String(), tree.String())
+
+	opts := git.CloneOptions{
+		Bare: true,
+		RemoteCreateCallback: func(r *git.Repository, name, url string) (*git.Remote, git.ErrorCode) {
+			fmt.Printf("RemoteCreateCallback name(%s) url(%s)\n", name, url)
+			remote, err := r.Remotes.Create(REMOTENAME, url)
+			if err != nil {
+				return nil, git.ErrGeneric
+			}
+			return remote, git.ErrOk
+		},
+	}
+
+	localRepo, err := git.Clone(remoteRepo.Path(), localRepoPath, &opts)
+
+	// create reference to current commit
+
+	ref, err := localRepo.Head()
+	head := ref.Target()
+	fmt.Printf("Head(%s)", ref.Target())
+
+	c, err := localRepo.LookupCommit(head)
+	checkFatal(err)
+	fmt.Printf("parent count(%d)\n", c.ParentCount())
+
+	c = c.Parent(0)
+	fmt.Printf("parent id(%s)", c.Id())
+	fmt.Printf("parent count(%d)\n", c.ParentCount())
+
+	c = c.Parent(0)
+	fmt.Printf("parent id(%s)", c.Id())
+	fmt.Printf("parent count(%d)\n", c.ParentCount())
+
+	//ref.SetTarget(c.Id(), "HELLO WORLD!")
+
+	ref2, err := localRepo.References.Create("refs/heads/foo", c.Id(), true, "")
+	fmt.Printf("%v", ref2)
+	/*
+		walk, err := localRepo.Walk()
+		checkFatal(err)
+
+		walk.Iterate(func(commit *git.Commit) bool {
+			fmt.Printf("commit(%v)", commit)
+			return true
+		})
+
+		walk.Free()
+
+		oid := git.NewOidFromBytes([]byte("99c080a722ce799e1577dcb5a601dbf91053175d"))
+		//checkFatal(err)
+		//fmt.Sprintf("ref name(%s)", ref.Name())
+		c, err := localRepo.LookupCommit(oid)
+		fmt.Printf("ID(%s)", c.Id())
+	*/
+
+	fmt.Printf("repo.Path(%s)\n", localRepo.Path())
+	fmt.Printf("remoteRepo.Workdir(%s)\n", remoteRepo.Workdir())
+
+	//git.Clone(remotePathURL,localRepoPath
+}
+*/
