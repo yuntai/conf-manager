@@ -1,10 +1,72 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	git "github.com/yuntai/git2go"
 	"os"
+	"strings"
+	"sync"
 )
+
+type TreeEntry struct {
+	oid  string
+	name string
+}
+
+type stack struct {
+	lock sync.Mutex // you don't have to do this if you don't want thread safety
+	s    []*TreeEntry
+}
+
+func NewStack() *stack {
+	return &stack{s: make([]*TreeEntry, 0)}
+}
+
+func (s *stack) Push(v *TreeEntry) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	s.s = append(s.s, v)
+}
+
+//TODO: perf cache?
+func (s *stack) getKey(basename string) string {
+	var names []string
+	for _, entry := range s.s {
+		names = append(names, entry.name)
+	}
+	names = append(names, basename)
+	return strings.Join(names, "/")
+}
+
+func (s *stack) IsEmpty() bool {
+	return len(s.s) == 0
+}
+
+func (s *stack) Pop() (*TreeEntry, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	l := len(s.s)
+	if l == 0 {
+		return nil, errors.New("Empty Stack")
+	}
+
+	res := s.s[l-1]
+	s.s = s.s[:l-1]
+	return res, nil
+}
+
+func (s *stack) Peep() (*TreeEntry, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	l := len(s.s)
+	if l == 0 {
+		return nil, errors.New("Empty Stack")
+	}
+	return s.s[l-1], nil
+}
 
 type RepoRemoteConfig struct {
 	url        string
@@ -108,6 +170,13 @@ func (r *Repo) getTip() (string, error) {
 	return currentTip.Id().String(), nil
 }
 
+func isAncestor(l string, r string, postOrderListMap *map[string]int) bool {
+	return (*postOrderListMap)[l] > (*postOrderListMap)[r]
+}
+
+func getPrefix(s *stack) {
+}
+
 func (r *Repo) getSnapshot() (*map[string][]byte, error) {
 	if r.branch == nil {
 		branch, err := r.getBranch("master")
@@ -139,30 +208,56 @@ func (r *Repo) getSnapshot() (*map[string][]byte, error) {
 
 	//var kv map[string][]byte
 
-	/*
-		var postOrderList []string
-		tree.WalkWithMode(func(name string, entry *git.TreeEntry) int {
-			fmt.Printf("OID(%v) t(%v) n(%s)\n", entry.Id, entry.Type, entry.Name)
-			postOrderList = append(postOrderList, entry.Id.String())
-			return 0
-		}, git.TreeWalkModePost)
-	*/
-
-	// TODO: doesn't work!
-	kv := make(map[string][]byte)
-	var currentKey string
+	var postOrderIndex int
+	postOrderListMap := make(map[string]int)
 
 	tree.WalkWithMode(func(name string, entry *git.TreeEntry) int {
+		oid := entry.Id.String()
+		fmt.Printf("name(%v) type(%v) oid(%v)\n", entry.Name, entry.Type, oid)
+		postOrderListMap[entry.Id.String()] = postOrderIndex
+		postOrderIndex += 1
+		return 0
+	}, git.TreeWalkModePost)
+
+	fmt.Printf("Post order list(%v)\n", postOrderListMap)
+	kv := make(map[string][]byte)
+	stack := NewStack()
+	tree.WalkWithMode(func(name string, entry *git.TreeEntry) int {
+		oid := entry.Id.String()
+		fmt.Printf("name(%v) type(%v) oid(%v)\n", entry.Name, entry.Type, oid)
+
+		for {
+			if stack.IsEmpty() {
+				break
+			}
+			p, err := stack.Peep()
+			if err != nil {
+				panic(err)
+			}
+
+			if !isAncestor(p.oid, oid, &postOrderListMap) {
+				_, err := stack.Pop()
+				if err != nil {
+					panic(err)
+				}
+			} else {
+				break
+			}
+		}
+
 		if entry.Type == git.ObjectTree {
-			currentKey = currentKey + "/" + entry.Name
+			stack.Push(&TreeEntry{oid, entry.Name})
 		} else if entry.Type == git.ObjectBlob {
-			blobKey := currentKey + "/" + entry.Name
+			blobKey := stack.getKey(entry.Name)
 			blob, err := r.repo.LookupBlob(entry.Id)
 			if err != nil {
 				panic(err)
 			}
 			kv[blobKey] = blob.Contents()
+		} else {
+			fmt.Printf("Object type(%v) not supported\n", entry.Type)
 		}
+
 		return 0
 	}, git.TreeWalkModePre)
 	return &kv, nil
