@@ -116,7 +116,7 @@ func TestKeyPrefixWatch(t *testing.T) {
 
 	config := &WatcherConfig{
 		watchType: "keyprefix",
-		prefix:    testKeyprefix,
+		key:       testKeyprefix,
 		host:      consulAddr,
 	}
 

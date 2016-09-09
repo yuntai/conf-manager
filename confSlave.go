@@ -4,7 +4,7 @@ import (
 	"time"
 
 	consulapi "github.com/hashicorp/consul/api"
-	git "gopkg.in/libgit2/git2go.v24"
+	git "github.com/yuntai/git2go"
 )
 
 type SlaveConfig struct {

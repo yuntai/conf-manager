@@ -6,54 +6,117 @@ package main
 // git pull (packed file?)
 
 import (
-	"fmt"
+	"flag"
 	"log"
-	"path"
-	"strings"
-	"time"
+	"os"
+	_ "time"
 
 	consulapi "github.com/hashicorp/consul/api"
-	git "gopkg.in/libgit2/git2go.v24"
 )
 
-type MasterConfig struct {
-	configKey       string
-	monitorInterval int64
-	updateInterval  int64
+type ConfMasterConfig struct {
+	globalConfigKeyPrefix string
+	monitorInterval       int64
+	updateInterval        int64
+	consulHost            string
 }
 
-type MasterContext struct {
+type ConfMaster struct {
 	nodeName     string
-	config       *MasterConfig
+	config       *ConfMasterConfig
 	consulClient *consulapi.Client
 	kv           *consulapi.KV
-	appConfigs   map[string]*AppConfig
-	nodeType     string
+	watcher      *Watcher
 }
 
-//TODO: use interface style
-type ConfMaster struct {
+func parseParams() (interface{}, string) {
+	// TODO: ugly
+	var nodeType = flag.String("nodetype", "slave", "specify node type")
+	*nodeType = "master"
+
+	/*
+		var configKeyPrefix = flag.String("configkey", DEFAULT_CONFIG_KEY_PREFIX, "key prefix for config version")
+		var consulHost = flag.String("consulhost", DEFAULT_CONSUL_HOST, "consul host")
+		var updateInterval = flag.Int64("updateinterval", DEFAULT_UPDATE_INTERVAL, "update interval in millisecond")
+		var monitorInterval = flag.Int64("monitorinterval", DEFUALT_MONITOR_INTERVAL, "monitor interval in millisecond")
+
+		// slave only param
+		var gitRoot = flag.String("gitroot", DEFAULT_LOCAL_GIT_PATH_ROOT, "local git path root")
+	*/
+
+	flag.Parse()
+
+	if !flag.Parsed() {
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+	return nil, ""
 }
 
-func NewConfMaster(config *MasterConfig) (*ConfMaster, error) {
-	m := &ConfMaster{}
+func NewConfMaster(config *ConfMasterConfig) (*ConfMaster, error) {
+	consulClient, err := GetConsulClient(config.consulHost)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	/*
+		nodeName, err := consulClient.Agent().NodeName()
+		if err != nil {
+			log.Fatal(err)
+		}
+	*/
+
+	kv := consulClient.KV()
+
+	watcherConfig := &WatcherConfig{
+		watchType: "prefix",
+		key:       config.globalConfigKeyPrefix,
+		host:      config.consulHost,
+	}
+
+	// global key watcher
+	watcher, err := NewWatcher(watcherConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	m := &ConfMaster{
+		nodeName:     MASTER_NODE_NAME,
+		config:       config,
+		consulClient: consulClient,
+		kv:           kv,
+		watcher:      watcher,
+	}
+
+	/*
+		updateTicker := time.NewTicker(time.Millisecond * time.Duration(config.updateInterval))
+		monitorTicker := time.NewTicker(time.Millisecond * time.Duration(config.monitorInterval))
+		globalKeyCh := watcher.eventCh
+	*/
+
+	/*
+		go func() {
+			for {
+				select {
+				case <-updateTicker.C:
+					monitorWatch(context)
+				case <-monitorTicker.C:
+					updateCommit(context)
+				case <-done:
+					return
+				}
+			}
+		}()
+	*/
+
 	return m, nil
 }
 
-func (c *ConfMaster) dosomething() (*interface{}, error) {
-	return nil, nil
+func (c *ConfMasterConfig) watch() {
+
 }
 
-func AddFSRepo(context *MasterContext, pathName string, branchName string) error {
-	repo, err := git.OpenRepository(pathName)
-	if err != nil {
-		return err
-	}
-	repoName := path.Base(pathName)
-	context.repos["repoName/branchName"] = &Repo{"", repoName, branchName, repo}
-	return nil
-}
-
+/*
 func monitorWatch(context *MasterContext) {
 	return
 	config := context.config
@@ -123,9 +186,10 @@ func initialize(context *MasterContext) {
 			}
 			//strings.Split(k, "/")
 		}
-	*/
 }
+*/
 
+/*
 func runMaster(done chan struct{}, context *MasterContext) {
 	//flushKV("", context.kv)
 	// add test file repo
@@ -197,19 +261,5 @@ func updateCommit(context *MasterContext) {
 
 func masterLoop(done chan struct{}, context *MasterContext) {
 	config := context.config
-	updateTicker := time.NewTicker(time.Millisecond * time.Duration(config.updateInterval))
-	monitorTicker := time.NewTicker(time.Millisecond * time.Duration(config.monitorInterval))
-
-	go func() {
-		for {
-			select {
-			case <-updateTicker.C:
-				monitorWatch(context)
-			case <-monitorTicker.C:
-				updateCommit(context)
-			case <-done:
-				return
-			}
-		}
-	}()
 }
+*/

@@ -221,3 +221,6 @@ curl -v -X PUT -d 'test' http://localhost:8500/v1/kv/web/key1
 
 ### wait for the value changed using the ModifyIndex
 curl -v -X GET http://localhost:8500/v1/kv/web/key1?index=41
+
+### libgit2 related
+http://ben.straub.cc/categories/libgit2/

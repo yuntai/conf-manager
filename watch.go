@@ -11,7 +11,6 @@ import (
 type WatcherConfig struct {
 	watchType string
 	key       string
-	prefix    string
 	host      string
 }
 
@@ -46,11 +45,7 @@ func NewWatcher(config *WatcherConfig) (*Watcher, error) {
 	params := make(map[string]interface{})
 
 	params["type"] = config.watchType
-	if config.watchType == "key" {
-		params["key"] = config.key
-	} else {
-		params["prefix"] = config.prefix
-	}
+	params[config.watchType] = config.key
 
 	wp, err := watch.Parse(params)
 

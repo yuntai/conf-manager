@@ -10,8 +10,20 @@ import (
 	"log"
 
 	consulapi "github.com/hashicorp/consul/api"
-	git "gopkg.in/libgit2/git2go.v24"
+	git "github.com/yuntai/git2go"
 )
+
+/*
+func AddFSRepo(context *MasterContext, pathName string, branchName string) error {
+	repo, err := git.OpenRepository(pathName)
+	if err != nil {
+		return err
+	}
+	repoName := path.Base(pathName)
+	context.repos["repoName/branchName"] = &Repo{"", repoName, branchName, repo}
+	return nil
+}
+*/
 
 const (
 	STABLE = iota
