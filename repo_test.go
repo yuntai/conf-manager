@@ -12,6 +12,68 @@ import (
 	git "github.com/yuntai/git2go"
 )
 
+func checkoutBranch(t *testing.T, repo *git.Repository, branchRefName string) {
+	headRef, err := repo.References.Lookup("HEAD")
+	if err != nil {
+		t.Fatalf("Failed to get HeadRef: %v", headRef)
+	}
+	defer headRef.Free()
+
+	// switching to feature1 branch
+	newHeadRef, err := headRef.SetSymbolicTarget(branchRefName, "")
+	if err != nil {
+		t.Fatalf("Failed to set symbolic to branch(%s)", branchRefName)
+	}
+	defer newHeadRef.Free()
+
+	resolvedRef, err := newHeadRef.Resolve()
+	if err != nil {
+		fmt.Printf("failed to resolve new head\n")
+	}
+	defer resolvedRef.Free()
+	if resolvedRef.Name() != branchRefName {
+		t.Fatalf("Failed to checkout to [%s]", branchRefName)
+	}
+
+	checkoutOpts := &git.CheckoutOpts{
+		Strategy: git.CheckoutForce,
+	}
+	err = repo.CheckoutHead(checkoutOpts)
+	if err != nil {
+		t.Fatalf("Failed to checkout")
+	}
+}
+
+func createBranch(t *testing.T, repo *git.Repository, branchRefName string, oid *git.Oid) {
+	// creating feature1 branch
+	branchRef, err := repo.References.Create(branchRefName, oid, true, "")
+	if err != nil {
+		t.Fatalf("Failed to create branch ref: %s", branchRefName)
+	}
+	defer branchRef.Free()
+}
+
+func getHeadTip(t *testing.T, repo *git.Repository) (string, *git.Oid) {
+	headRef, err := repo.References.Lookup("HEAD")
+	if err != nil {
+		t.Fatalf("Failed to get HeadRef: %v", headRef)
+	}
+	defer headRef.Free()
+
+	ref, err := headRef.Resolve()
+	if err != nil {
+		fmt.Printf("Failed to resolve HEAD")
+	}
+	defer ref.Free()
+	return ref.Name(), ref.Target()
+}
+
+func printHeadTip(t *testing.T, repo *git.Repository) (string, *git.Oid) {
+	branchName, tip := getHeadTip(t, repo)
+	fmt.Printf("branch(%s) commit(%s)\n", branchName, tip.String())
+	return branchName, tip
+}
+
 // copied from libgit2/git_test.go
 func pathInRepo(repo *git.Repository, name string) string {
 	return path.Join(path.Dir(path.Dir(repo.Path())), name)
@@ -134,28 +196,21 @@ func makeTestGitWithBranch(t *testing.T, branchName string) *git.Repository {
 	repo := createTestRepo(t)
 
 	seedTestRepo(t, repo)
+
+	printHeadTip(t, repo)
+
+	// modify files in master branch
 	updateReadme(t, repo, "HELLO1")
 	updateReadme(t, repo, "HELLO2")
 	updateReadme(t, repo, "HELLO3")
 
-	headRef, err := repo.Head()
-	defer headRef.Free()
+	_, tip := printHeadTip(t, repo)
 
-	branchRef := "refs/heads/feature1"
+	createBranch(t, repo, "refs/heads/feature1", tip)
 
-	oid := headRef.Target()
-	ref, err := repo.References.Create(branchRef, oid, true, "")
-	if err != nil {
-		t.Fatalf("Failed to create ref: %v", ref)
-	}
-	defer ref.Free()
+	checkoutBranch(t, repo, "refs/heads/feature1")
 
-	headRef.SetSymbolicTarget(branchRef, "")
-	opts := &git.CheckoutOpts{
-		Strategy: git.CheckoutForce,
-	}
-
-	repo.CheckoutHead(opts)
+	// modify files in a new branch
 	updateReadme(t, repo, "HELLO4")
 	updateReadme(t, repo, "HELLO5")
 	updateReadme(t, repo, "HELLO6")
@@ -182,6 +237,11 @@ func makeTestGitWithBranch(t *testing.T, branchName string) *git.Repository {
 
 		repo.References.
 	*/
+	printHeadTip(t, repo)
+
+	checkoutBranch(t, repo, "refs/heads/master")
+	printHeadTip(t, repo)
+
 	return repo
 }
 
@@ -233,7 +293,7 @@ func TestRepoClone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get tip: %v", err)
 	}
-	fmt.Printf("current tip(%s)\n", commit)
+	fmt.Printf("cur tip(%s)\n", commit)
 }
 
 func TestRepoSnapshot(t *testing.T) {
@@ -263,9 +323,42 @@ func TestRepoSnapshot(t *testing.T) {
 	}
 	repo.getSnapshot()
 
-	fmt.Printf("current tip(%s)\n", commit)
+	fmt.Printf("cur tip(%s)\n", commit)
 }
 
 func TestRepoAddRemote(t *testing.T) {
-	makeTestGitWithBranch(t, "test-branch")
+	r := makeTestGitWithBranch(t, "test-branch")
+
+	url := fmt.Sprintf("file://%s", r.Path())
+	path := makeTempDir(t)
+
+	remoteConfig := &RepoRemoteConfig{
+		url:        url,
+		branchName: "feature1",
+	}
+
+	config := &RepoConfig{
+		path:         path,
+		remoteConfig: remoteConfig,
+	}
+
+	repo, err := CloneRepo(config)
+	fmt.Printf("path: %s\n", config.path)
+
+	//defer repo.Close()
+
+	if err != nil {
+		t.Fatalf("err(%s)", err)
+	}
+
+	r2 := makeTestGit(t)
+	repo.AddRemote("origin2", fmt.Sprintf("file://%s", r2.Path()))
+
+	remotes, err := repo.ListRemotes()
+	if err != nil {
+		t.Fatalf("Failed to list remotes")
+	}
+	for _, r := range remotes {
+		fmt.Printf("remtoe (%s)\n", r)
+	}
 }

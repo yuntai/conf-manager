@@ -64,7 +64,8 @@ func CloneRepo(config *RepoConfig) (*Repo, error) {
 
 	// TODO: need to set only branches that are interested
 	opts := git.CloneOptions{
-		Bare: config.bare,
+		CheckoutBranch: remoteConfig.branchName,
+		Bare:           config.bare,
 		RemoteCreateCallback: func(r *git.Repository, name, url string) (*git.Remote, git.ErrorCode) {
 			// name = branch name
 			fmt.Printf("RemoteCreateCallback name(%s) url(%s)\n", name, url)
@@ -84,9 +85,12 @@ func CloneRepo(config *RepoConfig) (*Repo, error) {
 
 	r := &Repo{config: config, repo: repo}
 	branch, err := r.getBranch(remoteConfig.branchName)
+
+	branch, err = r.repo.LookupBranch(remoteConfig.branchName, git.BranchLocal)
 	if err != nil {
 		return nil, err
 	}
+
 	r.branch = branch
 	return r, nil
 }
@@ -117,27 +121,38 @@ func (r *Repo) BranchName() (string, error) {
 }
 
 func (r *Repo) AddRemote(name string, remoteUrl string) error {
-	remote, err := r.repo.Remotes.Create(name, remoteUrl)
-	options := git.FetchOptions{
-		RemoteCallbacks: git.RemoteCallbacks{
-			CertificateCheckCallback: func(cert *git.Certificate, valid bool, hostname string) git.ErrorCode {
-				return 0
-				//return assertHostname(cert, valid, hostname, t)
-			},
-		},
-	}
-	err = remote.Fetch([]string{}, &options, "")
+	_, err := r.repo.Remotes.Create(name, remoteUrl)
 	if err != nil {
 		return err
 	}
+
+	//options := git.FetchOptions{
+	//	RemoteCallbacks: git.RemoteCallbacks{
+	//		CertificateCheckCallback: func(cert *git.Certificate, valid bool, hostname string) git.ErrorCode {
+	//			fmt.Printf("cert check host(%s)\n", hostname)
+	//			return 0
+	//			//return assertHostname(cert, valid, hostname, t)
+	//		},
+	//	},
+	//}
+	//err = remote.Fetch([]string{name}, &options, "")
+
+	//if err != nil {
+	//	return err
+	//}
 	return nil
+}
+
+func (r *Repo) ListRemotes() ([]string, error) {
+	return r.repo.Remotes.List()
 }
 
 // Close repository
 func (r *Repo) Close() error {
+	//TODO: Lock
 	if r.repo != nil {
-		r.repo = nil
 		repo := r.repo
+		r.repo = nil
 		var path string
 
 		if repo.IsBare() {
