@@ -7,6 +7,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	_ "time"
@@ -112,8 +113,18 @@ func NewConfMaster(config *ConfMasterConfig) (*ConfMaster, error) {
 	return m, nil
 }
 
-func (c *ConfMasterConfig) watch() {
-
+func (c *ConfMaster) Run() {
+	go func() {
+		for {
+			select {
+			case v := <-c.watcher.eventCh:
+				fmt.Printf("v(%#v)", v)
+				//processGlobalKey(v)
+				//case <-done:
+				//	return
+			}
+		}
+	}()
 }
 
 /*

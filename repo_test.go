@@ -12,6 +12,20 @@ import (
 	git "github.com/yuntai/git2go"
 )
 
+func createTag(t *testing.T, repo *Repository, commit *Commit, name, message string) *Oid {
+	loc, err := time.LoadLocation("Asia/Seoul")
+	checkFatal(t, err)
+	sig := &Signature{
+		Name:  "Rand Om Hacker",
+		Email: "random@hacker.com",
+		When:  time.Date(2013, 03, 06, 14, 30, 0, 0, loc),
+	}
+
+	tagId, err := repo.Tags.Create(name, commit, sig, message)
+	checkFatal(t, err)
+	return tagId
+}
+
 func checkoutBranch(t *testing.T, repo *git.Repository, branchRefName string) {
 	headRef, err := repo.References.Lookup("HEAD")
 	if err != nil {
@@ -206,37 +220,16 @@ func makeTestGitWithBranch(t *testing.T, branchName string) *git.Repository {
 
 	_, tip := printHeadTip(t, repo)
 
-	createBranch(t, repo, "refs/heads/feature1", tip)
+	refName := fmt.Sprintf("refs/heads/%s", branchName)
+	createBranch(t, repo, refName, tip)
 
-	checkoutBranch(t, repo, "refs/heads/feature1")
+	checkoutBranch(t, repo, refName)
 
 	// modify files in a new branch
 	updateReadme(t, repo, "HELLO4")
 	updateReadme(t, repo, "HELLO5")
 	updateReadme(t, repo, "HELLO6")
 
-	/*
-		defer ref.Free()
-
-		if err != nil {
-			t.Fatalf("Failed to access Head(%v)", err)
-		}
-		if !ref.IsBranch() {
-			t.Fatalf("!IsBranch()")
-		}
-		branch := ref.Branch()
-		commit, err := repo.LookupCommit(branch.Target())
-		if err != nil {
-			t.Fatalf("Failed to commit")
-		}
-
-		branch, err = repo.CreateBranch(branchName, commit, true)
-		if err != nil {
-			t.Fatalf("Failed to create a branch(%s)", branchName)
-		}
-
-		repo.References.
-	*/
 	printHeadTip(t, repo)
 
 	checkoutBranch(t, repo, "refs/heads/master")
@@ -272,15 +265,13 @@ func TestRepoClone(t *testing.T) {
 	r := makeTestGit(t)
 	url := fmt.Sprintf("file://%s", r.Path())
 
-	remoteConfig := &RepoRemoteConfig{
-		url:        url,
-		branchName: "master",
-	}
-
 	path := makeTempDir(t)
+
 	config := &RepoConfig{
-		path:         path,
-		remoteConfig: remoteConfig,
+		path:       path,
+		remoteUrl:  url,
+		branchName: "master",
+		bare:       true,
 	}
 
 	repo, err := CloneRepo(config)
@@ -300,15 +291,12 @@ func TestRepoSnapshot(t *testing.T) {
 	r := makeTestGit(t)
 	url := fmt.Sprintf("file://%s", r.Path())
 
-	remoteConfig := &RepoRemoteConfig{
-		url:        url,
-		branchName: "master",
-	}
-
 	path := makeTempDir(t)
 	config := &RepoConfig{
-		path:         path,
-		remoteConfig: remoteConfig,
+		path:       path,
+		remoteUrl:  url,
+		branchName: "master",
+		bare:       true,
 	}
 
 	repo, err := CloneRepo(config)
@@ -327,38 +315,22 @@ func TestRepoSnapshot(t *testing.T) {
 }
 
 func TestRepoAddRemote(t *testing.T) {
-	r := makeTestGitWithBranch(t, "test-branch")
+	branchName := "feature1"
 
+	r := makeTestGitWithBranch(t, branchName)
 	url := fmt.Sprintf("file://%s", r.Path())
-	path := makeTempDir(t)
-
-	remoteConfig := &RepoRemoteConfig{
-		url:        url,
-		branchName: "feature1",
-	}
 
 	config := &RepoConfig{
-		path:         path,
-		remoteConfig: remoteConfig,
+		path:       makeTempDir(t),
+		remoteUrl:  url,
+		branchName: branchName,
+		bare:       true,
 	}
 
 	repo, err := CloneRepo(config)
 	fmt.Printf("path: %s\n", config.path)
-
-	//defer repo.Close()
-
+	defer repo.Close()
 	if err != nil {
 		t.Fatalf("err(%s)", err)
-	}
-
-	r2 := makeTestGit(t)
-	repo.AddRemote("origin2", fmt.Sprintf("file://%s", r2.Path()))
-
-	remotes, err := repo.ListRemotes()
-	if err != nil {
-		t.Fatalf("Failed to list remotes")
-	}
-	for _, r := range remotes {
-		fmt.Printf("remtoe (%s)\n", r)
 	}
 }

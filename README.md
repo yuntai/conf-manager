@@ -30,6 +30,31 @@
 - Automatic rollback mechanism
 - Staggering
 
+# Git Inernal Related
+[Pluggable Backends in libgit2](http://blog.deveo.com/your-git-repository-in-a-database-pluggable-backends-in-libgit2/)
+* Object db 
+Immutable KV storage
+{hash => type, size, contents}
+
+Types:
+- blob
+- tree
+- commits
+
+* Ref db
+Mutable KV storage
+{Identifier => commit(SHA1)}
+- branches
+- tags
+- HEAD
+
+* libgit2 ODB(Object Database Backend)
+- `odb_loose`
+- `odb_pack`
+
+### Git Backend DB related
+[Your Git Repository in a Database: Pluggable Backends in libgit2](http://blog.deveo.com/your-git-repository-in-a-database-pluggable-backends-in-libgit2/)
+[Git pack format](https://www.kernel.org/pub/software/scm/git/docs/technical/pack-format.txt)
 
 ### Membership of participants & Fault Detection
 Could be outside of the scope of the project
@@ -140,8 +165,8 @@ Conf-Slave serves as a cache for each datacenter and contains Git repository. It
 
 ## Sample configuration
 From Jay's configuration (https://bitbucket.org/cdnetworks/gslb-msa/src/dfd6f207f0a66834861aef82eaa8a27936efd9b2/cache_mgmt/cache_conf.py?at=master&fileviewer=file-view-default)
+
 ### nginx upstream
-```
 server {
     listen       8082;
     server_name  $cache_domain_name;
@@ -163,10 +188,8 @@ server {
         root   html;
     }
 }
-```
 
 ### nginx downstream
-```
 server {
     listen       80;
     server_name  $cache_domain_name;
@@ -182,18 +205,14 @@ server {
         root   html;
     }
 }
-```
 
 ### ATS HDREWRITE
-```
 # default max-age
 cond %{READ_RESPONSE_HDR_HOOK} [AND]
 cond %{HEADER:Cache-Control} /max-age/ [NOT]
 add-header Cache-Control "max-age=1111"
-```
 
 ### ADS REMAP
-```
 map http://$cache_domain_name/ http://$org_domain_name/ @plugin=header_rewrite.so @pparam=hdr_rewrite/$cache_domain_name.conf
 map http://$cache_domain_name/inspect/ http://{cache}/
 map http://$cache_domain_name/internal/ http://{cache-internal}/
@@ -202,7 +221,6 @@ map http://$cache_domain_name/test/ http://{test}/
 map http://$cache_domain_name/hostdb/ http://{hostdb}/
 map http://$cache_domain_name/net/ http://{net}/
 map http://$cache_domain_name/http/ http://{http}/
-```
 
 ### Configuration
 (CS features by OUI & Configuration files)[https://wiki.cdnetworks.com/confluence/pages/viewpage.action?pageId=110991357]
@@ -224,3 +242,4 @@ curl -v -X GET http://localhost:8500/v1/kv/web/key1?index=41
 
 ### libgit2 related
 http://ben.straub.cc/categories/libgit2/
+
