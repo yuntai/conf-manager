@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8" />
+		<title>testapp</title>
+		<script src="jquery-2.1.4.min.js"></script>
+		<script>
+      $(function() {
+        var ws = new WebSocket("ws://localhost:8080/echo");
+
+        ws.onmessage = function(e) {
+          console.log("受信メッセージ:" + event.data);
+          $('<p>').text(event.data).appendTo($ml);
+        };
+
+        var $ml = $('#msg-list');
+        /*
+        $('#sendBtn').click(function(){
+          var data = $('#name').val();
+          ws.send(data);
+          console.log("送信メッセージ:" + data);
+          $('<li>').text(data).appendTo($ul);
+        });
+        */
+      });
+		</script>
+	</head>
+	<body>
+			<!-- <input id="name" type="text" /> 
+			<input type="button" id="sendBtn" value="send"></input>
+      -->
+      <p id="msg-list"></p>
+	</body>
+</html>

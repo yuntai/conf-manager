@@ -30,31 +30,6 @@
 - Automatic rollback mechanism
 - Staggering
 
-# Git Inernal Related
-[Pluggable Backends in libgit2](http://blog.deveo.com/your-git-repository-in-a-database-pluggable-backends-in-libgit2/)
-* Object db 
-Immutable KV storage
-{hash => type, size, contents}
-
-Types:
-- blob
-- tree
-- commits
-
-* Ref db
-Mutable KV storage
-{Identifier => commit(SHA1)}
-- branches
-- tags
-- HEAD
-
-* libgit2 ODB(Object Database Backend)
-- `odb_loose`
-- `odb_pack`
-
-### Git Backend DB related
-[Your Git Repository in a Database: Pluggable Backends in libgit2](http://blog.deveo.com/your-git-repository-in-a-database-pluggable-backends-in-libgit2/)
-[Git pack format](https://www.kernel.org/pub/software/scm/git/docs/technical/pack-format.txt)
 
 ### Membership of participants & Fault Detection
 Could be outside of the scope of the project
@@ -78,12 +53,12 @@ Initial idea is to have we have a central repository set up in a redundant way w
 ```json
   {
     services: [ {
-      name: test_service0, 
+      name: test_service0,
       branch: experimental_branch,
       tag: latest
     }],
     services: [ {
-      name: service0, 
+      name: service0,
       branch: master,
       tag: v1.0
     }],
@@ -106,7 +81,7 @@ Initial idea is to have we have a central repository set up in a redundant way w
 ## Conf-Slave (Surrogate Configuration Server for each datacenter)
 Conf-Slave serves as a cache for each datacenter and contains Git repository. It monitors dataceters branch 'datacenters/<datacenter ID>/version' to detect any changes in configuration for the datacenter. Instead of period pulling changes from the Conf-Slave, we could employ separate notification methanism such as using consul or other method to mitigate a possible risk of overloading the Conf-Master(Git Server) with Gil request.
 
-### Configuration fetcher 
+### Configuration fetcher
 - bootstrap configuration
   Minimally the process requires followin parameters
 
@@ -135,7 +110,7 @@ Conf-Slave serves as a cache for each datacenter and contains Git repository. It
 
     - Local configuration service
       - output json
-      - export configuration? how? 
+      - export configuration? how?
 
 ## Performance estimation
 - Assumption
@@ -165,8 +140,8 @@ Conf-Slave serves as a cache for each datacenter and contains Git repository. It
 
 ## Sample configuration
 From Jay's configuration (https://bitbucket.org/cdnetworks/gslb-msa/src/dfd6f207f0a66834861aef82eaa8a27936efd9b2/cache_mgmt/cache_conf.py?at=master&fileviewer=file-view-default)
-
 ### nginx upstream
+```
 server {
     listen       8082;
     server_name  $cache_domain_name;
@@ -188,8 +163,10 @@ server {
         root   html;
     }
 }
+```
 
 ### nginx downstream
+```
 server {
     listen       80;
     server_name  $cache_domain_name;
@@ -205,14 +182,18 @@ server {
         root   html;
     }
 }
+```
 
 ### ATS HDREWRITE
+```
 # default max-age
 cond %{READ_RESPONSE_HDR_HOOK} [AND]
 cond %{HEADER:Cache-Control} /max-age/ [NOT]
 add-header Cache-Control "max-age=1111"
+```
 
 ### ADS REMAP
+```
 map http://$cache_domain_name/ http://$org_domain_name/ @plugin=header_rewrite.so @pparam=hdr_rewrite/$cache_domain_name.conf
 map http://$cache_domain_name/inspect/ http://{cache}/
 map http://$cache_domain_name/internal/ http://{cache-internal}/
@@ -221,6 +202,7 @@ map http://$cache_domain_name/test/ http://{test}/
 map http://$cache_domain_name/hostdb/ http://{hostdb}/
 map http://$cache_domain_name/net/ http://{net}/
 map http://$cache_domain_name/http/ http://{http}/
+```
 
 ### Configuration
 (CS features by OUI & Configuration files)[https://wiki.cdnetworks.com/confluence/pages/viewpage.action?pageId=110991357]
@@ -242,4 +224,48 @@ curl -v -X GET http://localhost:8500/v1/kv/web/key1?index=41
 
 ### libgit2 related
 http://ben.straub.cc/categories/libgit2/
+
+### Running test server
+```
+consul agent -dev -bind=0.0.0.0 -data-dir=/mnt/tmp/consul-data-dir -advertise=127.0.0.1
+```
+
+### running txn
+```
+curl -v -X PUT -d @get-tree.json http://127.0.0.1:21001/v1/txn
+```
+```
+curl http://127.0.0.1:21001/v1/kv/?recurse
+```
+
+### SSH related
+https://gist.github.com/xorpaul/3d097242943ea5624c26https://gist.github.com/xorpaul/3d097242943ea5624c26
+
+### basic git operation
+https://blog.gopheracademy.com/advent-2014/git2go-tutorial/
+
+
+### consul leader election cli test
+Based on Consul's LEADER ELECTION [doc](https://www.consul.io/docs/guides/leader-election.html)
+
+```
+key="service/confmaster/leader"
+# create session using Session HTTP API
+sessionId=$(curl -s -X PUT -d '{"Name": "confmaster"}' http://localhost:8500/v1/session/create|jq -r .ID)
+
+# acquire a session for a given key from this node (true or false)
+curl -X PUT -d '{"Node":"me"}' http://localhost:8500/v1/kv/$key?acquire=$sessionId
+
+# stepping down
+curl -X PUT http://localhost:8500/v1/kv/$key?release=sessionId
+
+# discovering leader (client)
+curl http://localhost:8500/v1/kv/$key
+
+# List all active sessions
+curl http://localhost:8500/v1/session/list
+
+# detail about the session
+curl http://localhost:8500/v1/session/info/$sessionId|jq
+```
 

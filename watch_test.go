@@ -4,32 +4,69 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net"
 	"testing"
 	"time"
 
+	"io/ioutil"
+
+	testutil "bitbucket.org/cdnetworks/eos-conf/test"
+	"github.com/davecgh/go-spew/spew"
 	consulapi "github.com/hashicorp/consul/api"
+	consul "github.com/hashicorp/consul/consul"
 	_ "github.com/hashicorp/consul/watch"
 )
 
-var consulAddr string
 var testKey string
 var testKeyprefix string
 
+var nextPort = 15000
+
+func getPort() int {
+	p := nextPort
+	nextPort++
+	return p
+}
+
 func init() {
-	consulAddr = "localhost:8500"
 	testKey = "foo/bar/baz"
 	testKeyprefix = "foo/bar/"
 }
 
-func getConsulClient(t *testing.T, host string) (*consulapi.Client, error) {
-	config := consulapi.DefaultConfig()
-	config.Address = host + ":8500"
+func startConsulTestServer(t *testing.T) (*consul.Server, string) {
+	tempDir, err := ioutil.TempDir("", "consul")
+	checkFatal(t, err)
 
-	if client, err := consulapi.NewClient(config); err != nil {
-		return nil, err
-	} else {
-		return client, nil
+	config := consul.DefaultConfig()
+
+	addr := &net.TCPAddr{
+		IP:   []byte{127, 0, 0, 1},
+		Port: getPort(),
 	}
+
+	config.DataDir = tempDir
+	config.DevMode = true
+	config.RPCAddr = addr
+
+	spew.Dump(config)
+
+	s, err := consul.NewServer(config)
+	if err != nil {
+		t.Fatalf("failed to start a consul server: %v", err)
+	}
+	return s, addr.String()
+}
+
+func getConsulClient(t *testing.T, addr string) (*consulapi.Client, error) {
+	config := consulapi.DefaultConfig()
+	config.Address = addr
+
+	client, err := consulapi.NewClient(config)
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
 }
 
 func makeParams(t *testing.T, s string) map[string]interface{} {
@@ -42,14 +79,14 @@ func makeParams(t *testing.T, s string) map[string]interface{} {
 }
 
 func TestKeyWatch(t *testing.T) {
-	if consulAddr == "" {
-		t.Skip()
-	}
+	client, s := testutil.MakeClient(t)
+	defer s.Stop()
+	addr := s.HTTPAddr
 
 	config := &WatcherConfig{
 		watchType: "key",
 		key:       testKey,
-		host:      consulAddr,
+		host:      addr,
 	}
 
 	w, err := NewWatcher(config)
@@ -61,11 +98,6 @@ func TestKeyWatch(t *testing.T) {
 	go func() {
 		defer w.Shutdown()
 		time.Sleep(20 * time.Millisecond)
-
-		client, err := getConsulClient(t, "localhost")
-		if err != nil {
-			t.Fatalf("Failed to get Consul client: %s", err)
-		}
 
 		kv := client.KV()
 
@@ -105,39 +137,37 @@ func TestKeyWatch(t *testing.T) {
 		if string(e.Value) != expectedValue {
 			t.Errorf("Key(%s) Value(%s) Expected(%s)", e.Key, e.Value, expectedValue)
 		}
-		i += 1
+		i++
 	}
+
+	// delay server shutdown
+	time.Sleep(20 * time.Millisecond)
 }
 
 func TestKeyPrefixWatch(t *testing.T) {
-	if consulAddr == "" {
-		t.Skip()
-	}
+	client, server := testutil.MakeClient(t)
+	defer server.Stop()
+	addr := server.HTTPAddr
 
 	config := &WatcherConfig{
-		watchType: "keyprefix",
+		watchType: "prefix",
 		key:       testKeyprefix,
-		host:      consulAddr,
+		host:      addr,
 	}
 
 	w, err := NewWatcher(config)
 	if err != nil {
 		t.Fatalf("Failed to get watcher: %s", err)
 	}
-	t.Logf("Got watcher (%#v)\n", w)
+	//t.Logf("Got watcher (%#v)\n", w)
 
 	go func() {
 		defer w.Shutdown()
 		time.Sleep(20 * time.Millisecond)
 
-		client, err := getConsulClient(t, "localhost")
-		if err != nil {
-			t.Fatalf("Failed to get Consul client: %s", err)
-		}
-
 		kv := client.KV()
 
-		testKeyBases := [...]string{"baz", "test"}
+		testKeyBases := [...]string{"baz", "test", "foo", "holy", "yahoo"}
 		for _, b := range testKeyBases {
 			pair := &consulapi.KVPair{
 				Key:   testKeyprefix + b,
@@ -151,22 +181,27 @@ func TestKeyPrefixWatch(t *testing.T) {
 
 		// Wait for the query to run
 		time.Sleep(20 * time.Millisecond)
-		w.Shutdown()
 
 		// Delete the key
 		for _, b := range testKeyBases {
-			_, err = kv.Delete(testKeyprefix+b, nil)
+			key := testKeyprefix + b
+			_, err = kv.Delete(key, nil)
 			if err != nil {
-				t.Fatalf("err: %v", err)
+				t.Fatalf("Failed to delete key(%s): %v", key, err)
+			} else {
+				fmt.Printf("Successfully deleted key(%s)\n", key)
 			}
 		}
+
+		// wait for delete events being consumed
+		// delay server shutdown
+		time.Sleep(20 * time.Millisecond)
 	}()
 
 	for evt := range w.eventCh {
 		pairs := (evt).(consulapi.KVPairs)
-		fmt.Printf("len(%d)\n", len(pairs))
 		for _, pair := range pairs {
-			fmt.Printf("pair(%#v)\n", pair)
+			fmt.Printf("\tGot KV(%#v)\n", pair)
 		}
 	}
 }

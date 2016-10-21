@@ -1,13 +1,6 @@
 package main
 
-import (
-	"errors"
-	"fmt"
-	git "github.com/yuntai/git2go"
-	"strings"
-	"sync"
-)
-
+/*
 type TreeEntry struct {
 	oid  string
 	name string
@@ -70,23 +63,31 @@ func (s *stack) Peep() (*TreeEntry, error) {
 func isAncestor(l string, r string, postOrderListMap *map[string]int) bool {
 	return (*postOrderListMap)[l] > (*postOrderListMap)[r]
 }
+*/
 
-func (r *Repo) getSnapshot() (*map[string][]byte, error) {
-	if r.branch == nil {
-		branch, err := r.getBranch("master")
-		if err != nil {
-			fmt.Printf("Failed get master branch\n")
+/*
+seems useless
+func (r *Repo) GetSnapshot(commit string) (*map[string][]byte, error) {
+	var oid *git.Oid
+	var err error
+
+	if commit == "" {
+		oid = r.branch.Target()
+	} else {
+		if oid, err = git.NewOid(commit); err != nil {
 			return nil, err
 		}
-		r.branch = branch
 	}
-	currentTip, err := r.repo.LookupCommit(r.branch.Target())
+
+	fmt.Printf("Looking up oid(%s)\n", oid)
+	c, err := r.repo.LookupCommit(oid)
 	if err != nil {
+		fmt.Printf("Failed to find commit(%s)\n", commit)
 		return nil, err
 	}
 
 	// get tree object form commit object
-	obj, err := currentTip.Peel(git.ObjectTree)
+	obj, err := c.Peel(git.ObjectTree)
 	if err != nil {
 		fmt.Printf("Failed to peel commit object: %v\n", err)
 		return nil, err
@@ -98,27 +99,29 @@ func (r *Repo) getSnapshot() (*map[string][]byte, error) {
 		return nil, err
 	}
 
-	fmt.Printf("Tree(%#v)\n", tree)
-
-	//var kv map[string][]byte
+	//fmt.Printf("Tree(%#v)\n", tree)
 
 	var postOrderIndex int
 	postOrderListMap := make(map[string]int)
 
+	// walk with post-order
 	tree.WalkWithMode(func(name string, entry *git.TreeEntry) int {
-		oid := entry.Id.String()
-		fmt.Printf("name(%v) type(%v) oid(%v)\n", entry.Name, entry.Type, oid)
+		// oid := entry.Id.String()
+		//fmt.Printf("name(%v) type(%v) oid(%v)\n", entry.Name, entry.Type, oid)
 		postOrderListMap[entry.Id.String()] = postOrderIndex
 		postOrderIndex += 1
 		return 0
 	}, git.TreeWalkModePost)
 
-	fmt.Printf("Post order list(%v)\n", postOrderListMap)
+	// walk with pre-order
+	//fmt.Printf("Post order list(%v)\n", postOrderListMap)
+
 	kv := make(map[string][]byte)
+
 	stack := NewStack()
 	tree.WalkWithMode(func(name string, entry *git.TreeEntry) int {
 		oid := entry.Id.String()
-		fmt.Printf("name(%v) type(%v) oid(%v)\n", entry.Name, entry.Type, oid)
+		//fmt.Printf("name(%v) type(%v) oid(%v)\n", entry.Name, entry.Type, oid)
 
 		for {
 			if stack.IsEmpty() {
@@ -148,11 +151,12 @@ func (r *Repo) getSnapshot() (*map[string][]byte, error) {
 				panic(err)
 			}
 			kv[blobKey] = blob.Contents()
+			panic(fmt.Sprintf("Object type(%v) not supported\n", entry.Type))
 		} else {
-			fmt.Printf("Object type(%v) not supported\n", entry.Type)
 		}
 
 		return 0
 	}, git.TreeWalkModePre)
 	return &kv, nil
 }
+*/

@@ -7,11 +7,42 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
+	"os"
+	"testing"
+
+	"github.com/Sirupsen/logrus"
+	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 
 	consulapi "github.com/hashicorp/consul/api"
-	git "github.com/yuntai/git2go"
+	git "github.com/libgit2/git2go"
+
+	testutil "bitbucket.org/cdnetworks/eos-conf/test"
 )
+
+var gitHTTPPort = 9000
+
+func nextGitHTTPPort() int {
+	defer func() {
+		gitHTTPPort++
+	}()
+	return gitHTTPPort
+}
+
+// singleton logger
+var logger = logrus.New()
+
+// initialize logger
+// TODO: use environment variable or cmd line args to configure log level
+func init() {
+	logger.Formatter = &prefixed.TextFormatter{
+		ShortTimestamp:  false,
+		TimestampFormat: "2006/01/02 15:04:05",
+	}
+	logger.Level = logrus.InfoLevel
+	logger.Out = os.Stderr
+}
 
 /*
 func AddFSRepo(context *MasterContext, pathName string, branchName string) error {
@@ -23,36 +54,57 @@ func AddFSRepo(context *MasterContext, pathName string, branchName string) error
 	context.repos["repoName/branchName"] = &Repo{"", repoName, branchName, repo}
 	return nil
 }
-*/
+
 
 const (
 	STABLE = iota
 	TRANSITION
 )
+*/
 
 const (
-	DEFAULT_CONFIG_KEY_PREFIX       = "config/revision"
-	DEFAULT_CONFIG_WATCH_KEY_PREFIX = "config/watch"
-	DEFAULT_UPDATE_INTERVAL         = 1000 // in millisecond
-	DEFUALT_MONITOR_INTERVAL        = 3000
-	DEFAULT_CONSUL_HOST             = "localhost"
-
-	DEFAULT_LOCAL_GIT_PATH_ROOT = "/mnt/tmp/conf/gitroot"
-
-	MASTER_NODE_NAME = "master"
+	// DefaultGlobalConfigKeyPrefix is key prefix for global configuration
+	DefaultGlobalConfigKeyPrefix = "config/global"
+	// DefaultAppConfigKeyPrefix is key prefix for app configuration
+	DefaultAppConfigKeyPrefix = "config/app"
+	// DefaultConsulAddr specifies default consul host to contact
+	DefaultConsulAddr = "localhost:8500"
+	// DefaultCommitMonitorPeriod specifies montitor period in millisecond
+	DefaultCommitMonitorPeriod = 3000
+	// DefaultServiceKey for leader election
+	DefaultServiceKey = "service/confmaster/leader"
+	/*
+		DefaultUpdateInterval     = 1000
+		DefaultMonitorInterval    = 3000
+		MasterNodeName    = "master"
+	*/
 )
 
+// makeTempDir creates a temporary directory
+func makeTempDir(t *testing.T) string {
+	path, err := ioutil.TempDir("", "git2go")
+	checkFatal(t, err)
+	return path
+}
+
+// configureLogger configures a log.logger
+func configureLogger(prefix string) *logrus.Entry {
+	return logger.WithField("prefix", prefix)
+}
+
+// GetConsulClient allocaes a new consul client
 func GetConsulClient(host string) (*consulapi.Client, error) {
 	config := consulapi.DefaultConfig()
 	config.Address = host + ":8500"
 
-	if client, err := consulapi.NewClient(config); err != nil {
+	client, err := consulapi.NewClient(config)
+	if err != nil {
 		return nil, err
-	} else {
-		return client, nil
 	}
+	return client, nil
 }
 
+// flushKV flushes KV storage rooted at prefix
 func flushKV(prefix string, kv *consulapi.KV) error {
 	fmt.Printf("Flushing KV storage prefix(%s)\n", prefix)
 	_, err := kv.DeleteTree(prefix, nil)
@@ -63,15 +115,20 @@ func flushKV(prefix string, kv *consulapi.KV) error {
 	return err
 }
 
+// initGitRepo initizlies a local git repository
 func initGitRepo(path string) error {
-	if repo, err := git.InitRepository(path, false); err != nil {
+	if _, err := git.InitRepository(path, false); err != nil {
 		return err
-	} else {
-		fmt.Printf("repo(%v)", repo)
-		return nil
 	}
+	return nil
 }
 
+// copied from libgit2/git_test.go
+func checkFatal(t *testing.T, err error) {
+	testutil.CheckFatal(t, err)
+}
+
+// getLastCommit get the latest commit from "branch"
 func getLastCommit(repo *git.Repository, branchName string) (string, error) {
 	branch, err := repo.LookupBranch(branchName, git.BranchLocal)
 	if err != nil {
@@ -83,5 +140,8 @@ func getLastCommit(repo *git.Repository, branchName string) (string, error) {
 	//return nil, err
 	//}
 	currentTip, err := repo.LookupCommit(branch.Target())
+	if err != nil {
+		return "", nil
+	}
 	return currentTip.Id().String(), nil
 }
